@@ -4,63 +4,51 @@ from docx import Document
 from fpdf import FPDF
 
 st.set_page_config(
-    page_title="Универсальный ИИ Путевой лист",
+    page_title="ИИ Путевой лист для водителей",
     page_icon="🚛",
     layout="wide"
 )
 
 class WaybillGenerator:
     def __init__(self, data: dict = None):
-        # Если данные не переданы, используем пустой словарь
         self.data = data if data is not None else {}
 
-    def create_word(self, filename="waybill_empty.docx"):
-        """Генерация чистого шаблона путевого листа в формате Word (DOCX)"""
+    def create_word(self):
         doc = Document()
-        
-        # Заголовок
         doc.add_heading("ЖҮК КӨЛІГІНІҢ ЖОЛ ҚАҒАЗЫ", level=1)
         doc.add_heading("ПУТЕВОЙ ЛИСТ ГРУЗОВОГО АВТОМОБИЛЯ", level=2)
         
-        # Основные данные
         doc.add_paragraph(f"Дата: {self.data.get('date', '____________________')}")
         doc.add_paragraph(f"Автомобиль: {self.data.get('car', '____________________')} | Госномер: {self.data.get('plate', '________________')}")
         doc.add_paragraph(f"Водитель: {self.data.get('driver', '________________________________________')}")
         
-        # Блоки допуска
         doc.add_heading("Медицинский и технический контроль", level=3)
         doc.add_paragraph(f"Медосмотр: {self.data.get('medical', '____________________')}")
         doc.add_paragraph(f"Техосмотр (механик): {self.data.get('mechanic', '____________________')}")
         doc.add_paragraph(f"Начальный спидометр: {self.data.get('km_start', '__________')} км | Топливо: {self.data.get('fuel_start', '__________')} л")
 
-        # Маршрут
         doc.add_heading("Задание и Маршрут", level=3)
         doc.add_paragraph(f"Заказчик: {self.data.get('customer', '________________________________________')}")
         doc.add_paragraph(f"Пункт погрузки: {self.data.get('point_load', '________________________________')}")
         doc.add_paragraph(f"Пункт разгрузки: {self.data.get('point_unload', '________________________________')}")
         doc.add_paragraph(f"Характер груза: {self.data.get('cargo', '________________________________')}")
 
-        # Итоги
         doc.add_heading("Итоги смены", level=3)
         doc.add_paragraph(f"Конечный спидометр: {self.data.get('km_end', '__________')} км | Топливо при возврате: {self.data.get('fuel_end', '__________')} л")
 
-        # Сохранение в буфер памяти для Streamlit
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
 
-    def create_pdf(self, filename="waybill_empty.pdf"):
-        """Генерация чистого шаблона путевого листа в формате PDF"""
+    def create_pdf(self):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Helvetica", size=12)
         
-        # Заголовок
         pdf.cell(0, 10, txt="PUTEVOY LIST GRUZOVOGO AVTOMOBILYA", ln=True, align="C")
         pdf.ln(5)
         
-        # Данные
         pdf.cell(0, 8, txt=f"Data: {self.data.get('date', '____________________')}", ln=True)
         pdf.cell(0, 8, txt=f"Avtomobil: {self.data.get('car', '____________________')} | Gosnomer: {self.data.get('plate', '________________')}", ln=True)
         pdf.cell(0, 8, txt=f"Voditel: {self.data.get('driver', '________________________________________')}", ln=True)
@@ -89,9 +77,9 @@ class WaybillGenerator:
         return buffer
 
 
-# --- Streamlit Веб-интерфейс ---
-st.title("🚛 Генератор путевых листов (AI)")
-st.markdown("Заполните форму или оставьте поля пустыми для получения бланка с прочерками.")
+# --- Веб-интерфейс ---
+st.title("🚛 Мобильный путевой лист для водителей")
+st.info("💡 **Совет для водителей:** Откройте эту ссылку со смартфона. Нажимайте на поля ввода и используйте **голосовой ввод (иконку микрофона на клавиатуре телефона)**, чтобы быстро заполнять данные голосом без набора текста вручную!")
 
 col1, col2 = st.columns(2)
 
@@ -119,7 +107,6 @@ with col2:
     km_end = st.text_input("Спидометр (возврат, км)", "")
     fuel_end = st.text_input("Топливо (возврат, л)", "")
 
-# Сбор данных из формы
 form_data = {
     "date": date if date else None,
     "car": car if car else None,
@@ -137,20 +124,18 @@ form_data = {
     "fuel_end": fuel_end if fuel_end else None,
 }
 
-# Удаляем ключи со значением None, чтобы сработал `.get(..., '___')` в генераторе
 clean_data = {k: v for k, v in form_data.items() if v is not None}
-
 generator = WaybillGenerator(clean_data)
 
 st.markdown("---")
-st.subheader("📥 Скачать документ")
+st.subheader("📥 Скачать готовый путевой лист")
 
 col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
     docx_buffer = generator.create_word()
     st.download_button(
-        label="📄 Скачать в формате Word (DOCX)",
+        label="📄 Скачать Word (.docx)",
         data=docx_buffer,
         file_name="putevoy_list.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -159,7 +144,7 @@ with col_btn1:
 with col_btn2:
     pdf_buffer = generator.create_pdf()
     st.download_button(
-        label="🔴 Скачать в формате PDF",
+        label="🔴 Скачать PDF",
         data=pdf_buffer,
         file_name="putevoy_list.pdf",
         mime="application/pdf"
