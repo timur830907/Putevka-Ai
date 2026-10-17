@@ -1,11 +1,11 @@
 import io
 import streamlit as st
 from docx import Document
-from docx.shared import Inches, Pt, Cm
+from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
-from docx.oxml import OxmlElement, parse_xml
-from docx.oxml.ns import qn, nsdecls
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 from fpdf import FPDF
 
 st.set_page_config(
@@ -34,8 +34,7 @@ class WaybillGenerator:
         doc = Document()
 
         # Поля страницы
-        sections = doc.sections
-        for section in sections:
+        for section in doc.sections:
             section.top_margin = Cm(1.5)
             section.bottom_margin = Cm(1.5)
             section.left_margin = Cm(1.5)
@@ -56,10 +55,9 @@ class WaybillGenerator:
         p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         p_date.add_run(f"Күні / Дата: {self.data.get('date', '«_____» ____________ 20___ ж./г.')}").font.size = Pt(10)
 
-        # Шапка: Организация и Автомобиль (Таблица)
+        # Шапка: Организация и Автомобиль
         header_table = doc.add_table(rows=3, cols=2)
         header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        header_table.autofit = False
 
         headers_data = [
             [f"Ұйым / Организация:\n{self.data.get('organization', '___________________________________')}",
@@ -78,7 +76,7 @@ class WaybillGenerator:
 
         doc.add_paragraph().paragraph_format.space_after = Pt(4)
 
-        # Блок контроля и допуска (Медосмотр и Механик)
+        # Блок контроля и допуска
         doc.add_heading("1. Рұқсат берілуі / Медицинский и технический контроль", level=3)
         
         control_table = doc.add_table(rows=2, cols=2)
@@ -105,7 +103,6 @@ class WaybillGenerator:
         route_table = doc.add_table(rows=5, cols=4)
         route_table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-        # Заголовки таблицы маршрута
         headers = ["Тапсырыс беруші / Заказчик", "Тиеу орны / Пункт погрузки", "Түсіру орны / Пункт разгрузки", "Жүк түрі / Наим. груза"]
         for j, h in enumerate(headers):
             cell = route_table.rows[0].cells[j]
@@ -114,7 +111,6 @@ class WaybillGenerator:
             cell.paragraphs[0].runs[0].font.size = Pt(9)
             set_cell_border(cell, top={"sz": 6}, bottom={"sz": 6}, left={"sz": 4}, right={"sz": 4})
 
-        # Заполнение строк маршрута
         r_customer = self.data.get('customer', '')
         r_load = self.data.get('point_load', '')
         r_unload = self.data.get('point_unload', '')
@@ -139,7 +135,7 @@ class WaybillGenerator:
         # Подписи
         doc.add_paragraph().paragraph_format.space_after = Pt(10)
         p_sign = doc.add_paragraph()
-        p_sign.add_run("Диспетчер / Жауапты тұлға: ____________________ (подпись)            Жүргізуші / Водитель: ____________________ (подпись)").font.size = Pt(9)
+        p_sign.add_run("Диспетчер / Жауапты тұлға: ____________________            Жүргізуші / Водитель: ____________________").font.size = Pt(9)
 
         buffer = io.BytesIO()
         doc.save(buffer)
@@ -161,5 +157,26 @@ class WaybillGenerator:
         pdf.ln(4)
         
         pdf.cell(0, 6, txt="--- CONTROL & MEDICAL ---", ln=True)
-        pdf.cell(0, 6, txt=f"Medosmotr: Dopushten | Tehosmotr: Ispravan", ln=True)
-        pdf.cell(0
+        pdf.cell(0, 6, txt="Medosmotr: Dopushten | Tehosmotr: Ispravan", ln=True)
+        pdf.cell(0, 6, txt=f"Spidometr start: {self.data.get('km_start', '__________')} km | Toplivo start: {self.data.get('fuel_start', '__________')} l", ln=True)
+        pdf.cell(0, 6, txt=f"Spidometr end: {self.data.get('km_end', '__________')} km | Toplivo end: {self.data.get('fuel_end', '__________')} l", ln=True)
+        pdf.ln(4)
+        
+        pdf.cell(0, 6, txt="--- MARSHRUT / ZADANIE ---", ln=True)
+        pdf.cell(0, 6, txt=f"Zakazchik: {self.data.get('customer', '________________________________________')}", ln=True)
+        pdf.cell(0, 6, txt=f"Pogruzka: {self.data.get('point_load', '________________________________')}", ln=True)
+        pdf.cell(0, 6, txt=f"Razgruzka: {self.data.get('point_unload', '________________________________')}", ln=True)
+        pdf.cell(0, 6, txt=f"Gruz: {self.data.get('cargo', '________________________________')}", ln=True)
+        pdf.ln(6)
+
+        pdf.cell(0, 6, txt="Podpis: ____________________", ln=True)
+
+        buffer = io.BytesIO()
+        pdf_bytes = pdf.output()
+        buffer.write(pdf_bytes)
+        buffer.seek(0)
+        return buffer
+
+
+# --- Streamlit Веб-интерфейс ---
+st.title("🚛 Официальный путевой лист грузового
