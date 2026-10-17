@@ -1,13 +1,30 @@
 import io
 import streamlit as st
 from docx import Document
+from docx.shared import Inches, Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import qn, nsdecls
 from fpdf import FPDF
 
 st.set_page_config(
-    page_title="ИИ Путевой лист для водителей",
+    page_title="ИИ Путевой лист РК",
     page_icon="🚛",
     layout="wide"
 )
+
+def set_cell_border(cell, **kwargs):
+    """Настройка границ ячейки таблицы Word"""
+    tcPr = cell._element.get_or_add_tcPr()
+    tcBorders = parse_xml(r'<w:tcBorders %s/>' % nsdecls('w'))
+    for edge in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        edge_data = kwargs.get(edge)
+        if edge_data:
+            tag = 'w:{}'.format(edge)
+            element = parse_xml(f'<{tag} %s w:val="{edge_data.get("val", "single")}" w:sz="{edge_data.get("sz", "4")}" w:space="0" w:color="{edge_data.get("color", "auto")}"/>' % nsdecls('w'))
+            tcBorders.append(element)
+    tcPr.append(tcBorders)
 
 class WaybillGenerator:
     def __init__(self, data: dict = None):
@@ -15,26 +32,114 @@ class WaybillGenerator:
 
     def create_word(self):
         doc = Document()
-        doc.add_heading("ЖҮК КӨЛІГІНІҢ ЖОЛ ҚАҒАЗЫ", level=1)
-        doc.add_heading("ПУТЕВОЙ ЛИСТ ГРУЗОВОГО АВТОМОБИЛЯ", level=2)
-        
-        doc.add_paragraph(f"Дата: {self.data.get('date', '____________________')}")
-        doc.add_paragraph(f"Автомобиль: {self.data.get('car', '____________________')} | Госномер: {self.data.get('plate', '________________')}")
-        doc.add_paragraph(f"Водитель: {self.data.get('driver', '________________________________________')}")
-        
-        doc.add_heading("Медицинский и технический контроль", level=3)
-        doc.add_paragraph(f"Медосмотр: {self.data.get('medical', '____________________')}")
-        doc.add_paragraph(f"Техосмотр (механик): {self.data.get('mechanic', '____________________')}")
-        doc.add_paragraph(f"Начальный спидометр: {self.data.get('km_start', '__________')} км | Топливо: {self.data.get('fuel_start', '__________')} л")
 
-        doc.add_heading("Задание и Маршрут", level=3)
-        doc.add_paragraph(f"Заказчик: {self.data.get('customer', '________________________________________')}")
-        doc.add_paragraph(f"Пункт погрузки: {self.data.get('point_load', '________________________________')}")
-        doc.add_paragraph(f"Пункт разгрузки: {self.data.get('point_unload', '________________________________')}")
-        doc.add_paragraph(f"Характер груза: {self.data.get('cargo', '________________________________')}")
+        # Поля страницы
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Cm(1.5)
+            section.bottom_margin = Cm(1.5)
+            section.left_margin = Cm(1.5)
+            section.right_margin = Cm(1.5)
 
-        doc.add_heading("Итоги смены", level=3)
-        doc.add_paragraph(f"Конечный спидометр: {self.data.get('km_end', '__________')} км | Топливо при возврате: {self.data.get('fuel_end', '__________')} л")
+        # Заголовок бланка РК
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_kz = p.add_run("ЖҮК КӨЛІГІНІҢ ЖОЛ ҚАҒАЗЫ № _____\n")
+        run_kz.bold = True
+        run_kz.font.size = Pt(13)
+        run_ru = p.add_run("ПУТЕВОЙ ЛИСТ ГРУЗОВОГО АВТОМОБИЛЯ № _____")
+        run_ru.bold = True
+        run_ru.font.size = Pt(13)
+
+        # Дата
+        p_date = doc.add_paragraph()
+        p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        p_date.add_run(f"Күні / Дата: {self.data.get('date', '«_____» ____________ 20___ ж./г.')}").font.size = Pt(10)
+
+        # Шапка: Организация и Автомобиль (Таблица)
+        header_table = doc.add_table(rows=3, cols=2)
+        header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        header_table.autofit = False
+
+        headers_data = [
+            [f"Ұйым / Организация:\n{self.data.get('organization', '___________________________________')}",
+             f"Автомобиль маркасы / Марка авто:\n{self.data.get('car', '___________________________________')}"],
+            [f"Жүргізуші / Водитель (ФИО):\n{self.data.get('driver', '___________________________________')}",
+             f"Мемлекеттік нөмір / Гос. номер:\n{self.data.get('plate', '___________________________________')}"],
+            [f"Куәлік № / Удостоверение №:\n{self.data.get('license', '___________________________________')}",
+             f"Тіркеме / Прицеп гос. номер:\n{self.data.get('trailer', '___________________________________')}"]
+        ]
+
+        for i, row in enumerate(header_table.rows):
+            for j, cell in enumerate(row.cells):
+                cell.text = headers_data[i][j]
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                set_cell_border(cell, top={"sz": 4}, bottom={"sz": 4}, left={"sz": 4}, right={"sz": 4})
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(4)
+
+        # Блок контроля и допуска (Медосмотр и Механик)
+        doc.add_heading("1. Рұқсат берілуі / Медицинский и технический контроль", level=3)
+        
+        control_table = doc.add_table(rows=2, cols=2)
+        control_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        c_data = [
+            [f"Медициналық тексеру / Медосмотр:\n\nЖүргізуші денсаулығы жарамды / Водитель допущен.\nҚол / Подпись дәрігер: _________________",
+             f"Техникалық тексеру / Техосмотр (Механик):\n\nАвтомобиль техникалық сау / Техника исправна.\nҚол / Подпись механик: _________________"],
+            [f"Выезд (Шығу) спидометр: {self.data.get('km_start', '____________')} км\nЖанармай (Отпуск топлива): {self.data.get('fuel_start', '____________')} л",
+             f"Возврат (Қайту) спидометр: {self.data.get('km_end', '____________')} км\nОстаток топлива: {self.data.get('fuel_end', '____________')} л"]
+        ]
+
+        for i, row in enumerate(control_table.rows):
+            for j, cell in enumerate(row.cells):
+                cell.text = c_data[i][j]
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                set_cell_border(cell, top={"sz": 4}, bottom={"sz": 4}, left={"sz": 4}, right={"sz": 4})
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(4)
+
+        # Таблица задания и маршрута
+        doc.add_heading("2. Жүргізушінің тапсырмасы / Задание водителя и маршрут", level=3)
+
+        route_table = doc.add_table(rows=5, cols=4)
+        route_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        # Заголовки таблицы маршрута
+        headers = ["Тапсырыс беруші / Заказчик", "Тиеу орны / Пункт погрузки", "Түсіру орны / Пункт разгрузки", "Жүк түрі / Наим. груза"]
+        for j, h in enumerate(headers):
+            cell = route_table.rows[0].cells[j]
+            cell.text = h
+            cell.paragraphs[0].runs[0].bold = True
+            cell.paragraphs[0].runs[0].font.size = Pt(9)
+            set_cell_border(cell, top={"sz": 6}, bottom={"sz": 6}, left={"sz": 4}, right={"sz": 4})
+
+        # Заполнение строк маршрута
+        r_customer = self.data.get('customer', '')
+        r_load = self.data.get('point_load', '')
+        r_unload = self.data.get('point_unload', '')
+        r_cargo = self.data.get('cargo', '')
+
+        for row_idx in range(1, 5):
+            row_cells = route_table.rows[row_idx].cells
+            if row_idx == 1:
+                row_cells[0].text = r_customer if r_customer else " "
+                row_cells[1].text = r_load if r_load else " "
+                row_cells[2].text = r_unload if r_unload else " "
+                row_cells[3].text = r_cargo if r_cargo else " "
+            else:
+                for c in row_cells:
+                    c.text = " "
+
+            for cell in row_cells:
+                if len(cell.paragraphs[0].runs) > 0:
+                    cell.paragraphs[0].runs[0].font.size = Pt(9)
+                set_cell_border(cell, top={"sz": 4}, bottom={"sz": 4}, left={"sz": 4}, right={"sz": 4})
+
+        # Подписи
+        doc.add_paragraph().paragraph_format.space_after = Pt(10)
+        p_sign = doc.add_paragraph()
+        p_sign.add_run("Диспетчер / Жауапты тұлға: ____________________ (подпись)            Жүргізуші / Водитель: ____________________ (подпись)").font.size = Pt(9)
 
         buffer = io.BytesIO()
         doc.save(buffer)
@@ -44,108 +149,17 @@ class WaybillGenerator:
     def create_pdf(self):
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Helvetica", size=12)
+        pdf.set_font("Helvetica", size=10)
         
-        pdf.cell(0, 10, txt="PUTEVOY LIST GRUZOVOGO AVTOMOBILYA", ln=True, align="C")
-        pdf.ln(5)
-        
-        pdf.cell(0, 8, txt=f"Data: {self.data.get('date', '____________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Avtomobil: {self.data.get('car', '____________________')} | Gosnomer: {self.data.get('plate', '________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Voditel: {self.data.get('driver', '________________________________________')}", ln=True)
+        pdf.cell(0, 8, txt="PUTEVOY LIST GRUZOVOGO AVTOMOBILYA (RK STANDARD)", ln=True, align="C")
         pdf.ln(4)
         
-        pdf.cell(0, 8, txt="--- Control ---", ln=True)
-        pdf.cell(0, 8, txt=f"Medosmotr: {self.data.get('medical', '____________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Tehosmotr: {self.data.get('mechanic', '____________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Spidometr start: {self.data.get('km_start', '__________')} km | Toplivo: {self.data.get('fuel_start', '__________')} l", ln=True)
+        pdf.cell(0, 6, txt=f"Data: {self.data.get('date', '____________________')}", ln=True)
+        pdf.cell(0, 6, txt=f"Organizaciya: {self.data.get('organization', '________________________________________')}", ln=True)
+        pdf.cell(0, 6, txt=f"Avtomobil: {self.data.get('car', '____________________')} | Gosnomer: {self.data.get('plate', '________________')}", ln=True)
+        pdf.cell(0, 6, txt=f"Voditel: {self.data.get('driver', '________________________________________')}", ln=True)
         pdf.ln(4)
         
-        pdf.cell(0, 8, txt="--- Marshrut ---", ln=True)
-        pdf.cell(0, 8, txt=f"Zakazchik: {self.data.get('customer', '________________________________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Pogruzka: {self.data.get('point_load', '________________________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Razgruzka: {self.data.get('point_unload', '________________________________')}", ln=True)
-        pdf.cell(0, 8, txt=f"Gruz: {self.data.get('cargo', '________________________________')}", ln=True)
-        pdf.ln(4)
-        
-        pdf.cell(0, 8, txt="--- Itogi ---", ln=True)
-        pdf.cell(0, 8, txt=f"Spidometr end: {self.data.get('km_end', '__________')} km | Toplivo end: {self.data.get('fuel_end', '__________')} l", ln=True)
-
-        buffer = io.BytesIO()
-        pdf_bytes = pdf.output()
-        buffer.write(pdf_bytes)
-        buffer.seek(0)
-        return buffer
-
-
-# --- Веб-интерфейс ---
-st.title("🚛 Мобильный путевой лист для водителей")
-st.info("💡 **Совет для водителей:** Откройте эту ссылку со смартфона. Нажимайте на поля ввода и используйте **голосовой ввод (иконку микрофона на клавиатуре телефона)**, чтобы быстро заполнять данные голосом без набора текста вручную!")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("1. Основные данные")
-    date = st.text_input("Дата", "")
-    car = st.text_input("Автомобиль / Спецтехника", "")
-    plate = st.text_input("Госномер", "")
-    driver = st.text_input("Водитель (ФИО)", "")
-
-    st.subheader("2. Контроль")
-    medical = st.text_input("Отметка медосмотра", "")
-    mechanic = st.text_input("Отметка механика", "")
-    km_start = st.text_input("Спидометр (выезд, км)", "")
-    fuel_start = st.text_input("Топливо (выезд, л)", "")
-
-with col2:
-    st.subheader("3. Маршрут и задание")
-    customer = st.text_input("Заказчик", "")
-    point_load = st.text_input("Пункт погрузки", "")
-    point_unload = st.text_input("Пункт разгрузки", "")
-    cargo = st.text_input("Характер груза", "")
-
-    st.subheader("4. Итоги смены")
-    km_end = st.text_input("Спидометр (возврат, км)", "")
-    fuel_end = st.text_input("Топливо (возврат, л)", "")
-
-form_data = {
-    "date": date if date else None,
-    "car": car if car else None,
-    "plate": plate if plate else None,
-    "driver": driver if driver else None,
-    "medical": medical if medical else None,
-    "mechanic": mechanic if mechanic else None,
-    "km_start": km_start if km_start else None,
-    "fuel_start": fuel_start if fuel_start else None,
-    "customer": customer if customer else None,
-    "point_load": point_load if point_load else None,
-    "point_unload": point_unload if point_unload else None,
-    "cargo": cargo if cargo else None,
-    "km_end": km_end if km_end else None,
-    "fuel_end": fuel_end if fuel_end else None,
-}
-
-clean_data = {k: v for k, v in form_data.items() if v is not None}
-generator = WaybillGenerator(clean_data)
-
-st.markdown("---")
-st.subheader("📥 Скачать готовый путевой лист")
-
-col_btn1, col_btn2 = st.columns(2)
-
-with col_btn1:
-    docx_buffer = generator.create_word()
-    st.download_button(
-        label="📄 Скачать Word (.docx)",
-        data=docx_buffer,
-        file_name="putevoy_list.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-
-with col_btn2:
-    pdf_buffer = generator.create_pdf()
-    st.download_button(
-        label="🔴 Скачать PDF",
-        data=pdf_buffer,
-        file_name="putevoy_list.pdf",
-        mime="application/pdf"
-    )
+        pdf.cell(0, 6, txt="--- CONTROL & MEDICAL ---", ln=True)
+        pdf.cell(0, 6, txt=f"Medosmotr: Dopushten | Tehosmotr: Ispravan", ln=True)
+        pdf.cell(0
