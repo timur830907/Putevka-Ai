@@ -179,4 +179,77 @@ class WaybillGenerator:
 
 
 # --- Streamlit Веб-интерфейс ---
-st.title("🚛 Официальный путевой лист грузового
+st.title("🚛 Официальный путевой лист грузового авто (РК)")
+st.info("💡 **Совет для водителей:** Откройте эту ссылку со смартфона. Нажимайте на поля и надиктовывайте информацию через кнопку микрофона на клавиатуре телефона.")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("1. Реквизиты и техника")
+    organization = st.text_input("Наименование организации / ИП", "")
+    date = st.text_input("Дата путевого листа", "")
+    car = st.text_input("Марка автомобиля / спецтехники", "")
+    plate = st.text_input("Гос. номер ТС", "")
+    trailer = st.text_input("Гос. номер прицепа (при наличии)", "")
+    driver = st.text_input("Водитель (ФИО)", "")
+    license_no = st.text_input("Удостоверение водителя №", "")
+
+with col2:
+    st.subheader("2. Задание и показатели")
+    customer = st.text_input("Заказчик", "")
+    point_load = st.text_input("Пункт погрузки", "")
+    point_unload = st.text_input("Пункт разгрузки", "")
+    cargo = st.text_input("Наименование / характер груза", "")
+    
+    st.markdown("**Показатели спидометра и топлива:**")
+    col_k1, col_k2 = st.columns(2)
+    with col_k1:
+        km_start = st.text_input("Спидометр выезд (км)", "")
+        fuel_start = st.text_input("Топливо выезд (л)", "")
+    with col_k2:
+        km_end = st.text_input("Спидометр возврат (км)", "")
+        fuel_end = st.text_input("Топливо возврат (л)", "")
+
+form_data = {
+    "organization": organization if organization else None,
+    "date": date if date else None,
+    "car": car if car else None,
+    "plate": plate if plate else None,
+    "trailer": trailer if trailer else None,
+    "driver": driver if driver else None,
+    "license": license_no if license_no else None,
+    "customer": customer if customer else None,
+    "point_load": point_load if point_load else None,
+    "point_unload": point_unload if point_unload else None,
+    "cargo": cargo if cargo else None,
+    "km_start": km_start if km_start else None,
+    "fuel_start": fuel_start if fuel_start else None,
+    "km_end": km_end if km_end else None,
+    "fuel_end": fuel_end if fuel_end else None,
+}
+
+clean_data = {k: v for k, v in form_data.items() if v is not None}
+generator = WaybillGenerator(clean_data)
+
+st.markdown("---")
+st.subheader("📥 Скачать официальный бланк РК")
+
+col_btn1, col_btn2 = st.columns(2)
+
+with col_btn1:
+    docx_buffer = generator.create_word()
+    st.download_button(
+        label="📄 Скачать Word бланком РК (.docx)",
+        data=docx_buffer,
+        file_name="putevoy_list_RK.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+with col_btn2:
+    pdf_buffer = generator.create_pdf()
+    st.download_button(
+        label="🔴 Скачать PDF бланком РК (.pdf)",
+        data=pdf_buffer,
+        file_name="putevoy_list_RK.pdf",
+        mime="application/pdf"
+    )
